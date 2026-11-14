@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Mercader de Albion — Radar en Tiempo Real</title>
+  <!-- SDK Oficial de Telegram WebApp -->
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <!-- Instalación Oficial Monetag Telegram Mini App SDK (Zone 12263343) -->
+  <script src='//libtl.com/sdk.js' data-zone='12263343' data-sdk='show_12263343'></script>
+  <style>
+    :root {
+      --bg-dark: #0f1319;
+      --card-bg: #181f29;
+      --card-border: #2a3546;
+      --gold: #f5b942;
+      --gold-dim: #c99327;
+      --green: #2ecc71;
+      --blue: #3b82f6;
+      --text-main: #f1f5f9;
+      --text-muted: #94a3b8;
+    }
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+    body {
+      background-color: var(--bg-dark);
+      color: var(--text-main);
+      padding: 14px;
+      padding-bottom: 40px;
+    }
+    .header {
+      background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+      border: 1px solid var(--card-border);
+      border-radius: 14px;
+      padding: 14px;
+      margin-bottom: 12px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.4);
+    }
+    .header-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+      gap: 6px;
+    }
+    .title {
+      font-size: 15.5px;
+      font-weight: 800;
+      color: var(--gold);
+      letter-spacing: 0.3px;
+    }
+    .header-badges {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .server-badge {
+      background: rgba(59, 130, 246, 0.2);
+      border: 1px solid var(--blue);
+      color: #93c5fd;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 4px 8px;
+      border-radius: 999px;
+      white-space: nowrap;
+    }
+    .vip-top-btn {
+      background: linear-gradient(135deg, #f59e0b 0%, #b45309 100%);
+      border: 1px solid #fde68a;
+      color: #fff;
+      font-size: 11px;
+      font-weight: 800;
+      padding: 4px 9px;
+      border-radius: 999px;
+      cursor: pointer;
+      white-space: nowrap;
+      box-shadow: 0 2px 8px rgba(245, 158, 11, 0.4);
+    }
+    .vip-active-pill {
+      background: linear-gradient(135deg, #10b981 0%, #047857 100%);
+      border: 1px solid #6ee7b7;
+      color: #fff;
+      font-size: 11px;
+      font-weight: 800;
+      padding: 4px 9px;
+      border-radius: 999px;
+      white-space: nowrap;
+    }
+    .stats-bar {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+    .stat-pill {
+      background: rgba(255,255,255,0.04);
+      padding: 4px 8px;
+      border-radius: 6px;
+    }
+    .stat-pill b {
+      color: var(--text-main);
+    }
+    /* Panel Desplegable de Membresía VIP / Premium */
+    .vip-modal {
+      display: none;
+      background: linear-gradient(135deg, #27173a 0%, #171226 100%);
+      border: 1.5px solid var(--gold);
+      border-radius: 14px;
+      padding: 15px;
+      margin-bottom: 14px;
+      box-shadow: 0 6px 20px rgba(245, 185, 66, 0.2);
+    }
+    .vip-modal.open {
+      display: block;
+    }
+    .vip-modal-title {
+      font-size: 15px;
+      font-weight: 800;
+      color: var(--gold);
+      margin-bottom: 6px;
+    }
+    .vip-modal-list {
+      font-size: 12.5px;
+      color: #e2e8f0;
+      line-height: 1.55;
+      margin-bottom: 12px;
+    }
+    .btn-buy-stars {
+      width: 100%;
+      background: linear-gradient(135deg, #f5b942 0%, #d97706 100%);
+      color: #0f1319;
+      border: none;
+      border-radius: 10px;
+      padding: 11px;
+      font-size: 13.5px;
+      font-weight: 800;
+      cursor: pointer;
+      box-shadow: 0 3px 10px rgba(245, 185, 66, 0.3);
+    }
+    .controls {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-bottom: 14px;
+    }
+    .btn-refresh {
+      width: 100%;
+      background: linear-gradient(135deg, #f5b942 0%, #d97706 100%);
+      color: #0f1319;
+      border: none;
+      border-radius: 10px;
+      padding: 12px;
+      font-size: 14px;
+      font-weight: 800;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      box-shadow: 0 3px 10px rgba(245, 185, 66, 0.25);
+    }
+    .btn-reward {
+      width: 100%;
+      background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+      color: #ffffff;
+      border: 1px solid #60a5fa;
+      border-radius: 10px;
+      padding: 10px;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+    .btn-refresh:active, .btn-reward:active, .btn-buy-stars:active {
+      transform: scale(0.98);
+    }
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      padding: 13px;
+      margin-bottom: 11px;
+      position: relative;
+      box-shadow: 0 3px 10px rgba(0,0,0,0.25);
+    }
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 10px;
+      gap: 8px;
+    }
+    .item-name {
+      font-size: 14.5px;
+      font-weight: 700;
+      color: #ffffff;
+      line-height: 1.3;
+    }
+    .roi-badge {
+      background: rgba(46, 204, 113, 0.18);
+      border: 1px solid var(--green);
+      color: #4ade80;
+      font-size: 12px;
+      font-weight: 800;
+      padding: 3px 8px;
+      border-radius: 8px;
+      white-space: nowrap;
+    }
+    .route-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      background: rgba(0,0,0,0.25);
+      padding: 9px;
+      border-radius: 9px;
+      margin-bottom: 9px;
+    }
+    .route-box {
+      font-size: 12px;
+    }
+    .route-label {
+      color: var(--text-muted);
+      font-size: 11px;
+      margin-bottom: 2px;
+    }
+    .route-city {
+      font-weight: 700;
+      color: #e2e8f0;
+      margin-bottom: 2px;
+    }
+    .route-price {
+      color: var(--gold);
+      font-weight: 700;
+    }
+    .route-age {
+      font-size: 10.5px;
+      color: #64748b;
+    }
+    .card-footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 12.5px;
+      padding-top: 6px;
+      border-top: 1px solid rgba(255,255,255,0.06);
+    }
+    .profit-val {
+      color: #4ade80;
+      font-weight: 800;
+      font-size: 13.5px;
+    }
+    .mode-tag {
+      font-size: 11px;
+      color: #93c5fd;
+      background: rgba(59, 130, 246, 0.12);
+      padding: 2px 7px;
+      border-radius: 6px;
+    }
+    .loading {
+      text-align: center;
+      padding: 35px 15px;
+      color: var(--text-muted);
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="header-top">
+      <div class="title">🦅 MERCADER DE ALBION</div>
+      <div class="header-badges">
+        <div class="server-badge" id="serverName">Cargando...</div>
+        <button class="vip-top-btn" id="vipHeaderBtn" onclick="toggleVipPanel()">
+          👑 PREMIUM / VIP
+        </button>
+      </div>
+    </div>
+    <div class="stats-bar">
+      <div class="stat-pill">⚡ NATS: <b id="natsCount">0</b> órdenes</div>
+      <div class="stat-pill">🔥 Calientes: <b id="hotCount">0</b></div>
+      <div class="stat-pill" id="vipStatusPill">📢 Plan: <b>Gratis (Con Anuncios)</b></div>
+    </div>
+  </div>
+
+  <!-- Tarjeta Desplegable de Membresía VIP arriba de todo -->
+  <div class="vip-modal" id="vipModal">
+    <div class="vip-modal-title">👑 MEMBRESÍA MERCADER VIP (30 DÍAS)</div>
+    <div class="vip-modal-list" id="vipModalText">
+      • 🚫 <b>100% Libre de Publicidad</b> (Sin anuncios al abrir ni al actualizar)<br/>
+      • ⚡ <b>Acceso directo e instantáneo</b> al Top 10 de rutas NATS<br/>
+      • 🛡️ Activación automática e inmediata en tu cuenta de Telegram
+    </div>
+    <button class="btn-buy-stars" id="buyVipBtn" onclick="purchaseVipWithStars()">
+      ⭐ Activar VIP por 100 Estrellas (30 Días)
+    </button>
+  </div>
+
+  <div class="controls">
+    <button class="btn-refresh" onclick="triggerRewardedInterstitialScan()">
+      🔄 Actualizar Top 10 en Tiempo Real
+    </button>
+    <button class="btn-reward" id="rewardPopupBtn" onclick="triggerRewardedPopup()">
+      ⚡ Impulso NATS en Vivo (Desbloquear Rutas Extra)
+    </button>
+  </div>
+
+  <div id="cardsContainer">
+    <div class="loading">⚡ Cruzando precios de las 7 ciudades en tiempo real...</div>
+  </div>
+
+  <script>
+    const tg = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
+    let currentUserId = null;
+    let isUserVip = false;
+    let vipStarsPrice = 100;
+
+    if (tg) {
+      tg.ready();
+      tg.expand();
+      if (tg.initDataUnsafe && tg.initDataUnsafe.user) {
+        currentUserId = tg.initDataUnsafe.user.id;
+      }
+    }
+
+    function toggleVipPanel() {
+      const modal = document.getElementById("vipModal");
+      modal.classList.toggle("open");
+    }
+
+    // =========================================================================
+    // 1. IN-APP INTERSTITIAL AUTOMÁTICO (SOLO PARA USUARIOS GRATIS, NO VIP)
+    // =========================================================================
+    function initInAppInterstitialIfNotVip() {
+      if (isUserVip) {
+        console.log("Usuario VIP activo: anuncios de Monetag desactivados.");
+        return;
+      }
+      if (typeof show_12263343 === "function") {
+        try {
+          show_12263343({
+            type: 'inApp',
+            inAppSettings: {
+              frequency: 2,
+              capping: 0.1,
+              interval: 30,
+              timeout: 5,
+              everyPage: false
+            }
+          });
+        } catch (e) {
+          console.log("In-App Interstitial init error:", e);
+        }
+      }
+    }
+
+    // =========================================================================
+    // 2. REWARDED INTERSTITIAL (SI ES VIP, ACTUALIZA DIRECTO SIN PUBLICIDAD)
+    // =========================================================================
+    function triggerRewardedInterstitialScan() {
+      if (isUserVip) {
+        loadScanData();
+        return;
+      }
+      if (typeof show_12263343 === "function") {
+        show_12263343().then(() => {
+          loadScanData();
+        }).catch(() => {
+          loadScanData();
+        });
+      } else {
+        loadScanData();
+      }
+    }
+
+    // =========================================================================
+    // 3. REWARDED POPUP (SI ES VIP, ACTUALIZA DIRECTO SIN PUBLICIDAD)
+    // =========================================================================
+    function triggerRewardedPopup() {
+      if (isUserVip) {
+        loadScanData();
+        return;
+      }
+      if (typeof show_12263343 === "function") {
+        show_12263343('pop').then(() => {
+          loadScanData();
+        }).catch(() => {
+          loadScanData();
+        });
+      } else {
+        loadScanData();
+      }
+    }
+
+    // =========================================================================
+    // 4. COMPRA NATIVA DE VIP CON TELEGRAM STARS DENTRO DE LA MINI APP
+    // =========================================================================
+    async function purchaseVipWithStars() {
+      const btn = document.getElementById("buyVipBtn");
+      btn.textContent = "⏳ Generando factura oficial de Telegram Stars...";
+      try {
+        const q = currentUserId ? `?user_id=${currentUserId}` : "";
+        const res = await fetch(`/api/create_vip_invoice${q}`);
+        const data = await res.json();
+
+        if (data.invoice_link && tg && typeof tg.openInvoice === "function") {
+          tg.openInvoice(data.invoice_link, (status) => {
+            if (status === "paid") {
+              isUserVip = true;
+              loadScanData();
+              alert("👑 ¡Pago exitoso! Tu Membresía VIP sin publicidad ya está activa.");
+            } else {
+              btn.textContent = `⭐ Activar VIP por ${vipStarsPrice} Estrellas (30 Días)`;
+            }
+          });
+        } else if (data.invoice_link) {
+          window.open(data.invoice_link, "_blank");
+          btn.textContent = `⭐ Activar VIP por ${vipStarsPrice} Estrellas (30 Días)`;
+        } else {
+          alert("También puedes escribir /vip directamente en el chat del bot.");
+          btn.textContent = `⭐ Activar VIP por ${vipStarsPrice} Estrellas (30 Días)`;
+        }
+      } catch (e) {
+        alert("Escribe /vip en el chat del bot para abrir el pago con Estrellas.");
+        btn.textContent = `⭐ Activar VIP por ${vipStarsPrice} Estrellas (30 Días)`;
+      }
+    }
+
+    function updateVipUI(vipData) {
+      if (!vipData) return;
+      isUserVip = Boolean(vipData.is_vip);
+      vipStarsPrice = vipData.price_stars || 100;
+
+      const headerBtn = document.getElementById("vipHeaderBtn");
+      const statusPill = document.getElementById("vipStatusPill");
+      const buyBtn = document.getElementById("buyVipBtn");
+      const rewardBtn = document.getElementById("rewardPopupBtn");
+      const modalText = document.getElementById("vipModalText");
+
+      if (isUserVip) {
+        headerBtn.className = "vip-active-pill";
+        headerBtn.innerHTML = `👑 VIP ACTIVO (${vipData.days_left}d)`;
+        statusPill.innerHTML = `👑 Plan: <b>VIP Sin Anuncios (${vipData.days_left} días restantes)</b>`;
+        buyBtn.textContent = `⭐ Extender +30 Días VIP por ${vipStarsPrice} Estrellas`;
+        rewardBtn.style.display = "none";
+        modalText.innerHTML = `✅ <b>¡Eres Miembro VIP Activo!</b><br/>Tienes <b>${vipData.days_left} días restantes</b> con 0% publicidad y escaneo instantáneo.`;
+      } else {
+        headerBtn.className = "vip-top-btn";
+        headerBtn.innerHTML = "👑 PREMIUM / VIP";
+        statusPill.innerHTML = "📢 Plan: <b>Gratis (Con Anuncios)</b>";
+        buyBtn.textContent = `⭐ Activar VIP por ${vipStarsPrice} Estrellas (30 Días)`;
+      }
+    }
+
+    async function loadScanData() {
+      const container = document.getElementById("cardsContainer");
+      container.innerHTML = '<div class="loading">⚡ Analizando flujo NATS y mercados reales...</div>';
+      try {
+        const q = currentUserId ? `?user_id=${currentUserId}` : "";
+        const res = await fetch(`/api/scan${q}`);
+        const data = await res.json();
+
+        document.getElementById("serverName").textContent = data.server_name;
+        document.getElementById("natsCount").textContent = data.nats_orders.toLocaleString();
+        document.getElementById("hotCount").textContent = data.hot_items;
+
+        if (data.vip) {
+          updateVipUI(data.vip);
+        }
+
+        if (!data.opportunities || data.opportunities.length === 0) {
+          container.innerHTML = '<div class="loading">⚠️ Sin rutas activas en este segundo. Toca Actualizar nuevamente.</div>';
+        } else {
+          container.innerHTML = data.opportunities.map((item, idx) => `
+            <div class="card">
+              <div class="card-header">
+                <div class="item-name">#${idx + 1} ${item.spanish_name}</div>
+                <div class="roi-badge">+${item.roi_pct}% ROI</div>
+              </div>
+              <div class="route-grid">
+                <div class="route-box">
+                  <div class="route-label">🛒 COMPRAR EN</div>
+                  <div class="route-city">${item.origin_city}</div>
+                  <div class="route-price">${item.buy_cost.toLocaleString()} silver</div>
+                  <div class="route-age">${item.origin_age}</div>
+                </div>
+                <div class="route-box">
+                  <div class="route-label">💰 VENDER EN</div>
+                  <div class="route-city">${item.dest_city}</div>
+                  <div class="route-price">${item.sell_price.toLocaleString()} silver</div>
+                  <div class="route-age">${item.dest_age}</div>
+                </div>
+              </div>
+              <div class="card-footer">
+                <div>📈 Ganancia Neta: <span class="profit-val">+${item.net_profit.toLocaleString()} s/u</span></div>
+                <div class="mode-tag">${item.sale_mode}</div>
+              </div>
+            </div>
+          `).join("");
+        }
+      } catch (err) {
+        container.innerHTML = '<div class="loading">❌ Error al conectar con el motor. Reintenta en unos segundos.</div>';
+      }
+    }
+
+    window.addEventListener("DOMContentLoaded", async () => {
+      await loadScanData();
+      initInAppInterstitialIfNotVip();
+    });
+  </script>
+</body>
+</html>

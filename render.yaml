@@ -1,0 +1,25 @@
+services:
+  - type: web
+    name: mercader-albion-bot
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: python main.py
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_CHAT_ID
+        value: "8079552382"
+      - key: ALBION_SERVER
+        value: americas
+      - key: SCAN_INTERVAL_SECONDS
+        value: "60"
+      - key: MAX_DATA_AGE_MINUTES
+        value: "10"
+      - key: DEFAULT_MIN_ROI
+        value: "12.0"
+      - key: DEFAULT_MIN_PROFIT
+        value: "1000"
