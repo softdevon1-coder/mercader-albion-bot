@@ -8,6 +8,7 @@ import json
 import logging
 import os
 import re
+import urllib.parse
 from collections import deque
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -806,6 +807,9 @@ def build_server_selection_keyboard(active_server: str) -> InlineKeyboardMarkup:
         buttons.append(
             [InlineKeyboardButton(f"{check}{info['name']}", callback_data=f"set_server:{key}")]
         )
+    buttons.append(
+        [InlineKeyboardButton("🎁 Ganar VIP Gratis (Invitar Amigos)", callback_data="open_referrals")]
+    )
     return InlineKeyboardMarkup(buttons)
 
 
@@ -924,8 +928,8 @@ class AdManager:
 
 class VipManager:
     """
-    Gestiona los miembros VIP que pagaron con Telegram Stars (o activados manualmente).
-    Los usuarios VIP navegan 100% libres de anuncios de Monetag y banners.
+    Gestiona los miembros VIP que pagaron con Telegram Stars (o activados manualmente),
+    así como el Sistema Viral de Referidos (Invita a 3 amigos = +7 días VIP sin publicidad).
     """
 
     def __init__(self, filepath: str = "vip_users.json") -> None:
@@ -933,7 +937,12 @@ class VipManager:
         self.data: Dict[str, Any] = {
             "vip_price_stars": 100,
             "vip_days": 30,
+            "referral_target": 3,
+            "referral_reward_days": 7,
             "vip_members": {},  # str(user_id) -> ISO datetime string de expiración
+            "known_users": [],  # lista de str(user_id) que ya iniciaron el bot
+            "referred_by": {},  # str(new_user_id) -> str(referrer_id)
+            "referrals_count": {},  # str(referrer_id) -> int (cantidad de amigos invitados)
         }
         self._load()
 
@@ -962,6 +971,14 @@ class VipManager:
     @property
     def vip_days(self) -> int:
         return int(self.data.get("vip_days", 30))
+
+    @property
+    def referral_target(self) -> int:
+        return max(1, int(self.data.get("referral_target", 3)))
+
+    @property
+    def referral_reward_days(self) -> int:
+        return max(1, int(self.data.get("referral_reward_days", 7)))
 
     def set_price_stars(self, stars: int) -> None:
         self.data["vip_price_stars"] = max(1, int(stars))
@@ -1018,6 +1035,64 @@ class VipManager:
         members[uid] = new_exp.isoformat()
         self._save()
         return new_exp
+
+    def get_referral_stats(self, user_id: Optional[int | str]) -> Dict[str, Any]:
+        uid = str(user_id) if user_id else "0"
+        counts = self.data.setdefault("referrals_count", {})
+        total_invited = int(counts.get(uid, 0))
+        target = self.referral_target
+        reward_days = self.referral_reward_days
+        cycle_progress = total_invited % target
+        remaining = target - cycle_progress
+        return {
+            "total_invited": total_invited,
+            "cycle_progress": cycle_progress,
+            "remaining": remaining,
+            "target": target,
+            "reward_days": reward_days,
+        }
+
+    def register_user_and_process_referral(
+        self, new_user_id: int | str, referrer_id: Optional[str] = None
+    ) -> Tuple[bool, bool, int, int, Optional[datetime]]:
+        """
+        Registra al usuario y si viene por un link de referido válido (?start=ref_XXXX)
+        siendo usuario nuevo, suma +1 al invitador y otorga VIP automático al llegar a la meta.
+        Retorna: (es_referido_valido, desbloqueo_premio, progreso_ciclo, total_invitados, fecha_exp_vip)
+        """
+        uid = str(new_user_id).strip()
+        ref_uid = str(referrer_id).strip() if referrer_id else ""
+        known = self.data.setdefault("known_users", [])
+        referred_by = self.data.setdefault("referred_by", {})
+        counts = self.data.setdefault("referrals_count", {})
+
+        is_first_time = uid not in known
+        if is_first_time:
+            known.append(uid)
+
+        # Validar que sea primera vez, que tenga invitador válido y que no se auto-invite
+        if (
+            is_first_time
+            and ref_uid
+            and ref_uid.isdigit()
+            and ref_uid != uid
+            and uid not in referred_by
+        ):
+            referred_by[uid] = ref_uid
+            new_total = int(counts.get(ref_uid, 0)) + 1
+            counts[ref_uid] = new_total
+            target = self.referral_target
+            cycle_progress = new_total % target
+            if cycle_progress == 0:
+                exp_dt = self.activate_vip(ref_uid, self.referral_reward_days)
+                self._save()
+                return True, True, target, new_total, exp_dt
+            self._save()
+            return True, False, cycle_progress, new_total, None
+
+        if is_first_time:
+            self._save()
+        return False, False, 0, int(counts.get(ref_uid, 0)) if ref_uid else 0, None
 
 
 class AlbionTelegramBot:
@@ -1117,6 +1192,7 @@ class AlbionTelegramBot:
         user_id_param = request.query.get("user_id", "").strip()
         user_is_vip = self.vip_manager.is_vip(user_id_param)
         user_days_left = self.vip_manager.days_left(user_id_param)
+        ref_stats = self.vip_manager.get_referral_stats(user_id_param)
 
         payload = {
             "server_name": SERVERS_CONFIG[self.config.server_key]["short_name"],
@@ -1127,6 +1203,7 @@ class AlbionTelegramBot:
                 "is_vip": user_is_vip,
                 "days_left": user_days_left,
                 "price_stars": self.vip_manager.price_stars,
+                "referrals": ref_stats,
             },
             "ad": {
                 "enabled": bool(self.ad_manager.data.get("enabled", True)) and not user_is_vip,
@@ -1300,6 +1377,8 @@ class AlbionTelegramBot:
             "</blockquote>\n\n"
             "🧭 <b>COMANDOS RÁPIDOS</b>\n"
             "• 👉 /scan — <b>Escanear oportunidades en vivo ahora mismo</b>\n"
+            "• 👉 /referidos — <b>🎁 Ganar VIP Gratis invitando amigos</b>\n"
+            "• 👉 /vip — <b>👑 Membresía VIP sin publicidad</b>\n"
             "• 👉 /config — <b>Ajustar filtros</b> <i>(Ej: /config 10 500)</i>\n\n"
             "👇 <b>Selecciona tu servidor de Albion Online:</b>"
         )
@@ -1308,6 +1387,51 @@ class AlbionTelegramBot:
         if not update.effective_message:
             return
         self._register_chat_id_if_needed(update)
+
+        user_id = update.effective_user.id if update.effective_user else (update.effective_chat.id if update.effective_chat else 0)
+        referrer_id: Optional[str] = None
+        if context.args and len(context.args) > 0:
+            arg0 = context.args[0].strip()
+            if arg0.startswith("ref_"):
+                referrer_id = arg0.replace("ref_", "", 1).strip()
+
+        if user_id:
+            is_valid_ref, reward_unlocked, cycle_progress, total_invited, exp_dt = (
+                self.vip_manager.register_user_and_process_referral(user_id, referrer_id)
+            )
+            if is_valid_ref and referrer_id:
+                target = self.vip_manager.referral_target
+                reward_days = self.vip_manager.referral_reward_days
+                try:
+                    if reward_unlocked and exp_dt:
+                        await context.bot.send_message(
+                            chat_id=int(referrer_id),
+                            text=(
+                                "🎉👑 <b>¡META DE REFERIDOS COMPLETADA!</b> 👑🎉\n"
+                                "━━━━━━━━━━━━━━━━━━━━━━\n"
+                                f"• 👥 Un nuevo mercader entró con tu enlace (<b>{target}/{target} invitados</b>).\n"
+                                f"• 🎁 <b>Premio activado:</b> <b>+{reward_days} Días de VIP Sin Publicidad</b>\n"
+                                f"• 📅 <b>VIP válido hasta:</b> <b>{exp_dt.strftime('%d/%m/%Y')} UTC</b>\n\n"
+                                "🚀 ¡Sigue compartiendo tu link con /referidos para acumular más días VIP gratis!"
+                            ),
+                            parse_mode=ParseMode.HTML,
+                        )
+                    else:
+                        rem = target - cycle_progress
+                        await context.bot.send_message(
+                            chat_id=int(referrer_id),
+                            text=(
+                                "🎁 <b>¡NUEVO REFERIDO REGISTRADO!</b>\n"
+                                "━━━━━━━━━━━━━━━━━━━━━━\n"
+                                f"• 👤 Un amigo acaba de iniciar el bot con tu enlace.\n"
+                                f"• 📊 <b>Progreso actual:</b> <b>{cycle_progress}/{target} amigos</b>\n"
+                                f"• ⏳ Te faltan solo <b>{rem} amigo(s)</b> para desbloquear <b>+{reward_days} Días de VIP Sin Publicidad</b>.\n\n"
+                                "👉 Revisa tu panel con /referidos."
+                            ),
+                            parse_mode=ParseMode.HTML,
+                        )
+                except Exception as notify_err:
+                    logger.debug(f"No se pudo notificar al referente {referrer_id}: {notify_err}")
 
         await update.effective_message.reply_text(
             self._build_start_dashboard_text(),
@@ -1724,6 +1848,86 @@ class AlbionTelegramBot:
             parse_mode=ParseMode.HTML,
         )
 
+    def _build_referrals_message_and_keyboard(
+        self, user_id: int | str, bot_username: str
+    ) -> Tuple[str, InlineKeyboardMarkup]:
+        stats = self.vip_manager.get_referral_stats(user_id)
+        target = stats["target"]
+        cycle_progress = stats["cycle_progress"]
+        remaining = stats["remaining"]
+        total_invited = stats["total_invited"]
+        reward_days = stats["reward_days"]
+
+        username_clean = (bot_username or "Mercaderalbion_bot").lstrip("@")
+        ref_link = f"https://t.me/{username_clean}?start=ref_{user_id}"
+
+        filled_dots = "🟢" * cycle_progress
+        empty_dots = "⚪" * remaining
+        progress_bar = f"{filled_dots}{empty_dots} ({cycle_progress}/{target})"
+
+        share_text = (
+            "🦅 ¡Mira este Bot de Arbitraje en Tiempo Real para Albion Online! "
+            "Escanea las 7 ciudades + Caerleon en vivo y te dice qué ítems transportar para ganar millones de Silver gratis:"
+        )
+        share_url = (
+            f"https://t.me/share/url?url={urllib.parse.quote(ref_link)}"
+            f"&text={urllib.parse.quote(share_text)}"
+        )
+
+        msg_text = (
+            "🎁 <b>SISTEMA DE REFERIDOS — GANA VIP GRATIS</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"Invita a tus amigos o compañeros de gremio de Albion Online y recibe "
+            f"<b>+{reward_days} Días de Membresía VIP (100% Sin Publicidad)</b> automáticamente por cada "
+            f"<b>{target} amigos</b> que inicien el bot con tu enlace.\n\n"
+            "📊 <b>TU PROGRESO ACTUAL:</b>\n"
+            "<blockquote>"
+            f"• 🎯 <b>Meta actual:</b> {progress_bar}\n"
+            f"• 👥 <b>Total de amigos invitados:</b> <b>{total_invited} mercaderes</b>\n"
+            f"• ⏳ <b>Te faltan:</b> <b>{remaining} amigo(s)</b> para recibir <b>+{reward_days} Días VIP Gratis</b>"
+            "</blockquote>\n\n"
+            "🔗 <b>Tu enlace personal de invitación:</b>\n"
+            f"<code>{ref_link}</code>\n\n"
+            "👇 <i>Toca el botón de abajo para enviarlo a tu gremio o amigos en 1 clic:</i>"
+        )
+
+        kb = InlineKeyboardMarkup(
+            [
+                [InlineKeyboardButton("📲 Compartir con Amigos / Gremio", url=share_url)],
+            ]
+        )
+        return msg_text, kb
+
+    async def cmd_referidos(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """Muestra el panel viral de referidos con link único y botón de compartir en 1 clic."""
+        if not update.effective_message:
+            return
+        self._register_chat_id_if_needed(update)
+        user_id = update.effective_user.id if update.effective_user else (update.effective_chat.id if update.effective_chat else 0)
+        bot_username = context.bot.username or "Mercaderalbion_bot"
+        msg_text, kb = self._build_referrals_message_and_keyboard(user_id, bot_username)
+        await update.effective_message.reply_text(
+            msg_text,
+            parse_mode=ParseMode.HTML,
+            reply_markup=kb,
+            disable_web_page_preview=True,
+        )
+
+    async def on_open_referrals(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        query = update.callback_query
+        if not query or not query.message:
+            return
+        await query.answer("Abriendo tu panel de referidos...")
+        user_id = query.from_user.id if query.from_user else 0
+        bot_username = context.bot.username or "Mercaderalbion_bot"
+        msg_text, kb = self._build_referrals_message_and_keyboard(user_id, bot_username)
+        await query.message.reply_text(
+            msg_text,
+            parse_mode=ParseMode.HTML,
+            reply_markup=kb,
+            disable_web_page_preview=True,
+        )
+
     async def background_scanner_loop(self, app: Application) -> None:
         logger.info(f"Iniciando bucle de Escucha Total NATS cada {self.config.scan_interval}s...")
         while True:
@@ -1843,6 +2047,8 @@ def main() -> None:
     application.add_handler(CommandHandler("scan", bot_controller.cmd_scan))
     application.add_handler(CommandHandler("config", bot_controller.cmd_config))
     application.add_handler(CommandHandler("vip", bot_controller.cmd_vip))
+    application.add_handler(CommandHandler("referidos", bot_controller.cmd_referidos))
+    application.add_handler(CommandHandler("invitar", bot_controller.cmd_referidos))
     application.add_handler(CommandHandler("preciovip", bot_controller.cmd_preciovip))
     application.add_handler(CommandHandler("darvip", bot_controller.cmd_darvip))
     application.add_handler(CommandHandler("anuncio", bot_controller.cmd_anuncio))
@@ -1853,6 +2059,9 @@ def main() -> None:
     )
     application.add_handler(
         CallbackQueryHandler(bot_controller.on_server_selected, pattern=r"^set_server:")
+    )
+    application.add_handler(
+        CallbackQueryHandler(bot_controller.on_open_referrals, pattern=r"^open_referrals$")
     )
 
     logger.info("Bot Modo Escucha Total NATS + Traductor Español iniciado...")

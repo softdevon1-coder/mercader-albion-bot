@@ -1,5 +1,10 @@
 {
   "vip_price_stars": 100,
   "vip_days": 30,
-  "vip_members": {}
+  "referral_target": 3,
+  "referral_reward_days": 7,
+  "vip_members": {},
+  "known_users": [],
+  "referred_by": {},
+  "referrals_count": {}
 }

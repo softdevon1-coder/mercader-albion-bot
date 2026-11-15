@@ -179,7 +179,24 @@
       justify-content: center;
       gap: 6px;
     }
-    .btn-refresh:active, .btn-reward:active, .btn-buy-stars:active {
+    .btn-referral {
+      width: 100%;
+      background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+      color: #ffffff;
+      border: 1px solid #34d399;
+      border-radius: 10px;
+      padding: 10px;
+      font-size: 13px;
+      font-weight: 800;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      margin-top: 8px;
+      box-shadow: 0 3px 10px rgba(16, 185, 129, 0.25);
+    }
+    .btn-refresh:active, .btn-reward:active, .btn-buy-stars:active, .btn-referral:active {
       transform: scale(0.98);
     }
     .card {
@@ -301,6 +318,9 @@
     <button class="btn-buy-stars" id="buyVipBtn" onclick="purchaseVipWithStars()">
       ⭐ Activar VIP por 100 Estrellas (30 Días)
     </button>
+    <button class="btn-referral" id="refModalBtn" onclick="shareReferralLink()">
+      🎁 Invita a 3 Amigos = +7 Días VIP Gratis (0/3)
+    </button>
   </div>
 
   <div class="controls">
@@ -309,6 +329,9 @@
     </button>
     <button class="btn-reward" id="rewardPopupBtn" onclick="triggerRewardedPopup()">
       ⚡ Impulso NATS en Vivo (Desbloquear Rutas Extra)
+    </button>
+    <button class="btn-referral" id="refControlBtn" onclick="shareReferralLink()">
+      🎁 Invita a 3 Amigos y Gana +7 Días VIP Gratis (0/3)
     </button>
   </div>
 
@@ -433,6 +456,18 @@
       }
     }
 
+    function shareReferralLink() {
+      const uid = currentUserId || "0";
+      const refUrl = `https://t.me/Mercaderalbion_bot?start=ref_${uid}`;
+      const shareText = "🦅 ¡Mira este Bot de Arbitraje en Tiempo Real para Albion Online! Escanea las 7 ciudades + Caerleon en vivo y te dice qué ítems transportar para ganar millones de Silver gratis:";
+      const fullShareLink = `https://t.me/share/url?url=${encodeURIComponent(refUrl)}&text=${encodeURIComponent(shareText)}`;
+      if (tg && typeof tg.openTelegramLink === "function") {
+        tg.openTelegramLink(fullShareLink);
+      } else {
+        window.open(fullShareLink, "_blank");
+      }
+    }
+
     function updateVipUI(vipData) {
       if (!vipData) return;
       isUserVip = Boolean(vipData.is_vip);
@@ -443,6 +478,17 @@
       const buyBtn = document.getElementById("buyVipBtn");
       const rewardBtn = document.getElementById("rewardPopupBtn");
       const modalText = document.getElementById("vipModalText");
+      const refModalBtn = document.getElementById("refModalBtn");
+      const refControlBtn = document.getElementById("refControlBtn");
+
+      if (vipData.referrals) {
+        const prog = vipData.referrals.cycle_progress || 0;
+        const target = vipData.referrals.target || 3;
+        const rDays = vipData.referrals.reward_days || 7;
+        const refLabel = `🎁 Invita a ${target} Amigos = +${rDays} Días VIP Gratis (${prog}/${target})`;
+        if (refModalBtn) refModalBtn.textContent = refLabel;
+        if (refControlBtn) refControlBtn.textContent = refLabel;
+      }
 
       if (isUserVip) {
         headerBtn.className = "vip-active-pill";
