@@ -22,6 +22,7 @@ import pandas as pd
 from dotenv import load_dotenv
 from pydantic import BaseModel, Field, field_validator
 from telegram import (
+    CopyTextButton,
     InlineKeyboardButton,
     InlineKeyboardMarkup,
     LabeledPrice,
@@ -1886,14 +1887,20 @@ class AlbionTelegramBot:
             f"• 👥 <b>Total de amigos invitados:</b> <b>{total_invited} mercaderes</b>\n"
             f"• ⏳ <b>Te faltan:</b> <b>{remaining} amigo(s)</b> para recibir <b>+{reward_days} Días VIP Gratis</b>"
             "</blockquote>\n\n"
-            "🔗 <b>Tu enlace personal de invitación:</b>\n"
+            "🔗 <b>Tu enlace personal de invitación (toca para copiar):</b>\n"
             f"<code>{ref_link}</code>\n\n"
-            "👇 <i>Toca el botón de abajo para enviarlo a tu gremio o amigos en 1 clic:</i>"
+            "👇 <i>Copia tu link con el botón de abajo para pegarlo en Discord, WhatsApp o Facebook, o envíalo directo por Telegram:</i>"
         )
 
         kb = InlineKeyboardMarkup(
             [
-                [InlineKeyboardButton("📲 Compartir con Amigos / Gremio", url=share_url)],
+                [
+                    InlineKeyboardButton(
+                        "📋 Copiar Link de Referido",
+                        copy_text=CopyTextButton(text=ref_link),
+                    )
+                ],
+                [InlineKeyboardButton("📲 Enviar a un Contacto / Grupo de Telegram", url=share_url)],
             ]
         )
         return msg_text, kb
